@@ -1,0 +1,1087 @@
+<title>Example Revision Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one reading column. Summary first (tiles, progress, next up, decisions), then phases in
+   working order, each item a collapsible card with a checkbox and a severity stripe; changelog last.
+   THEME: to re-theme, replace only the three token blocks below and the Google Fonts link above
+   (presets in palettes.md). Every color in the rest of the file comes from these tokens. */
+:root {
+  --ground: #F4F6F3;
+  --surface: #FFFFFF;
+  --surface-2: #ECEFEA;
+  --ink: #191F1D;
+  --ink-2: #4A544F;
+  --ink-3: #646E68;
+  --rule: #DCE1DA;
+  --rule-strong: #C3CBC1;
+  --accent: #2E6F63;
+  --accent-ink: #235349;
+  --accent-wash: #E4EEEA;
+  --on-accent: #FFFFFF;
+  --decide: #5B4B8A;
+  --decide-wash: #ECE8F5;
+  --sev-1: #8A2E20;
+  --sev-1-wash: #F6E4E0;
+  --sev-2: #9A5020;
+  --sev-2-wash: #F8EADD;
+  --sev-3: #7E6414;
+  --sev-3-wash: #F4EDD6;
+  --sev-4: #5E6962;
+  --sev-4-wash: #E9ECE8;
+  --shadow: 0 1px 2px rgba(25, 31, 29, .05), 0 6px 18px rgba(25, 31, 29, .05);
+  --font-display: "Newsreader", Georgia, "Times New Roman", serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --radius: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #121716;
+    --surface: #1A211F;
+    --surface-2: #222A28;
+    --ink: #E7EAE6;
+    --ink-2: #A9B3AE;
+    --ink-3: #85908A;
+    --rule: #2C3532;
+    --rule-strong: #3C4744;
+    --accent: #74B8A6;
+    --accent-ink: #9AD0C1;
+    --accent-wash: #1E2E2A;
+    --on-accent: #0E1312;
+    --decide: #B3A5DE;
+    --decide-wash: #272437;
+    --sev-1: #E09484;
+    --sev-1-wash: #2E1D19;
+    --sev-2: #DDA673;
+    --sev-2-wash: #2E241A;
+    --sev-3: #D2BA66;
+    --sev-3-wash: #2B2818;
+    --sev-4: #98A39A;
+    --sev-4-wash: #232927;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 18px rgba(0, 0, 0, .25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #121716;
+  --surface: #1A211F;
+  --surface-2: #222A28;
+  --ink: #E7EAE6;
+  --ink-2: #A9B3AE;
+  --ink-3: #85908A;
+  --rule: #2C3532;
+  --rule-strong: #3C4744;
+  --accent: #74B8A6;
+  --accent-ink: #9AD0C1;
+  --accent-wash: #1E2E2A;
+  --on-accent: #0E1312;
+  --decide: #B3A5DE;
+  --decide-wash: #272437;
+  --sev-1: #E09484;
+  --sev-1-wash: #2E1D19;
+  --sev-2: #DDA673;
+  --sev-2-wash: #2E241A;
+  --sev-3: #D2BA66;
+  --sev-3-wash: #2B2818;
+  --sev-4: #98A39A;
+  --sev-4-wash: #232927;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 18px rgba(0, 0, 0, .25);
+  color-scheme: dark;
+}
+
+/* ---------- base ---------- */
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+.page {
+  max-width: 820px;
+  margin: 0 auto;
+  padding-inline: clamp(16px, 3.5vw, 32px);
+  padding-block: clamp(20px, 4vw, 44px) 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+h1, h2, h3, h4, p { margin: 0; }
+a { color: var(--accent-ink); text-underline-offset: 2px; }
+code, .mono { font-family: var(--font-mono); }
+code {
+  font-size: .85em;
+  background: var(--surface-2);
+  padding: 1px 4px;
+  border-radius: 3px;
+  overflow-wrap: anywhere;
+}
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+/* ---------- masthead ---------- */
+.masthead { display: flex; flex-direction: column; gap: 10px; }
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: baseline;
+}
+.eyebrow .sep { color: var(--rule-strong); }
+h1 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(30px, 6.5vw, 42px);
+  line-height: 1.08;
+  letter-spacing: -.012em;
+  text-wrap: balance;
+}
+.standfirst {
+  font-family: var(--font-display);
+  font-size: clamp(16px, 2.4vw, 18px);
+  line-height: 1.5;
+  color: var(--ink-2);
+  max-width: 62ch;
+}
+
+/* ---------- summary ---------- */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 10px;
+}
+.tile {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-shadow: var(--shadow);
+}
+.tile .num {
+  font-family: var(--font-mono);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.tile .lbl {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.tile.is-blocker .num { color: var(--sev-1); }
+.tile.is-decision .num { color: var(--decide); }
+.tile.is-done .num { color: var(--accent); }
+
+.progress { display: flex; flex-direction: column; gap: 6px; margin-top: -12px; }
+.progress-track {
+  height: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--rule);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.progress-fill { height: 100%; width: 0; background: var(--accent); transition: width .35s ease; }
+.progress-note {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.callouts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+.callout {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  min-width: 0;
+}
+.callout h2 {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+}
+.callout.waiting { border-left-color: var(--sev-3); }
+.callout.waiting h2 { color: var(--sev-3); }
+.callout.decided { border-left-color: var(--decide); }
+.callout.decided h2 { color: var(--decide); }
+.callout ol, .callout ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 4px; }
+.callout li { max-width: 70ch; }
+.callout b { color: var(--ink); font-weight: 600; }
+.ref { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--ink); }
+a.ref { text-decoration: none; }
+a.ref:hover { text-decoration: underline; }
+
+/* ---------- toolbar ---------- */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 5;
+  box-shadow: var(--shadow);
+}
+.toolbar .spacer { flex: 1 1 auto; }
+button {
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  background: transparent;
+  border: 1px solid var(--rule-strong);
+  border-radius: 4px;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+button:hover { background: var(--surface-2); color: var(--ink); }
+button[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 500;
+}
+button.minor { border-color: transparent; color: var(--ink-3); }
+button.minor:hover { border-color: var(--rule-strong); }
+button.armed { background: var(--sev-1); border-color: var(--sev-1); color: var(--surface); }
+#copybox {
+  width: 100%;
+  min-height: 9rem;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 8px;
+}
+.empty { font-size: 13.5px; color: var(--ink-3); font-style: italic; }
+
+/* ---------- phases ---------- */
+.phase { display: flex; flex-direction: column; gap: 12px; }
+.phase-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--rule-strong);
+}
+.phase-ord {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-wash);
+  border-radius: 4px;
+  padding: 3px 7px;
+  letter-spacing: .04em;
+  white-space: nowrap;
+  margin-top: 4px;
+}
+.phase-head h2 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(20px, 3.4vw, 25px);
+  line-height: 1.2;
+  letter-spacing: -.008em;
+  margin-bottom: 3px;
+  text-wrap: balance;
+}
+.phase-head p { font-size: 13.5px; color: var(--ink-2); max-width: 62ch; }
+.phase-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  margin-top: 7px;
+}
+@media (max-width: 560px) {
+  .phase-head { grid-template-columns: auto minmax(0, 1fr); }
+  .phase-count { grid-column: 2; margin-top: 0; }
+  .toolbar { position: static; }
+}
+
+/* ---------- items ---------- */
+.items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.item {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--sev-4);
+  border-radius: var(--radius);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  box-shadow: var(--shadow);
+  scroll-margin-top: 84px;
+}
+.item[data-sev="1"] { border-left-color: var(--sev-1); }
+.item[data-sev="2"] { border-left-color: var(--sev-2); }
+.item[data-sev="3"] { border-left-color: var(--sev-3); }
+.item[data-sev="4"] { border-left-color: var(--sev-4); }
+.item[data-decision="true"] { border-style: dashed; border-color: var(--decide); border-left-style: solid; }
+.item.waiting { border-style: dashed; border-left-style: solid; }
+.item input[type="checkbox"] {
+  margin: 15px 0 0 12px;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.item > details { min-width: 0; }
+.item summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 12px 12px 12px 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  align-items: baseline;
+}
+.item summary::-webkit-details-marker { display: none; }
+.item summary:hover .t { color: var(--accent-ink); }
+.item .id {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-3);
+  letter-spacing: .04em;
+}
+.item .t {
+  font-size: 14.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  flex: 1 1 220px;
+  min-width: 0;
+  text-wrap: pretty;
+}
+.item.done { opacity: .58; }
+.item.done .t { text-decoration: line-through; text-decoration-thickness: 1px; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  background: var(--surface-2);
+  color: var(--ink-3);
+}
+.chip.s1 { background: var(--sev-1-wash); color: var(--sev-1); }
+.chip.s2 { background: var(--sev-2-wash); color: var(--sev-2); }
+.chip.s3 { background: var(--sev-3-wash); color: var(--sev-3); }
+.chip.s4 { background: var(--sev-4-wash); color: var(--sev-4); }
+.chip.dec { background: var(--decide-wash); color: var(--decide); }
+.chip.done { background: var(--accent-wash); color: var(--accent-ink); }
+.chip.new { background: transparent; color: var(--accent-ink); box-shadow: inset 0 0 0 1px var(--accent); }
+.chip.wait { background: transparent; color: var(--ink-3); box-shadow: inset 0 0 0 1px var(--ink-3); }
+
+.detail {
+  border-top: 1px solid var(--rule);
+  padding: 12px 14px 14px 10px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.detail section { display: flex; flex-direction: column; gap: 4px; }
+.detail h4 {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.detail section.done-note h4 { color: var(--accent-ink); }
+.detail p, .detail li { max-width: 66ch; }
+.detail ol, .detail ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 5px; }
+.detail ol li::marker { font-family: var(--font-mono); font-size: 12px; color: var(--ink-3); }
+.detail strong { color: var(--ink); font-weight: 600; }
+pre {
+  margin: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 9px 11px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  overflow-x: auto;
+  color: var(--ink);
+}
+.facts {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: var(--surface-2);
+  border-radius: 4px;
+  padding: 9px 11px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.facts div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; }
+.facts span:first-child { color: var(--ink-3); }
+.facts span:last-child { color: var(--ink); font-weight: 500; text-align: right; }
+.flag { border-left: 2px solid var(--sev-3); padding-left: 9px; font-size: 12.5px; }
+.needs { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
+
+/* ---------- archive ---------- */
+.archive {
+  border: 1px dashed var(--rule-strong);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+.archive > summary {
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.archive[open] > summary { margin-bottom: 12px; }
+.archive .phase { opacity: .7; }
+.archive .phase-ord { color: var(--ink-3); background: var(--surface-2); }
+.archive .item { grid-template-columns: minmax(0, 1fr); box-shadow: none; border-left-color: var(--rule-strong); }
+
+/* ---------- footer ---------- */
+footer {
+  border-top: 1px solid var(--rule-strong);
+  padding-top: 18px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+footer section { display: flex; flex-direction: column; gap: 6px; }
+footer h3 {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+footer p, footer li { max-width: 72ch; }
+footer ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 5px; }
+footer b { color: var(--ink-2); font-weight: 600; }
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%) translateY(14px);
+  max-width: calc(100% - 32px);
+  background: var(--ink);
+  color: var(--ground);
+  font-size: 12.5px;
+  padding: 8px 14px;
+  border-radius: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s ease, transform .2s ease;
+  z-index: 20;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
+</style>
+
+<!-- EXAMPLE CONTENT. Everything between <div class="page"> and </footer> is fictional sample data
+     showing every component. Replace it all with the real tracker; keep class names and data-* attributes. -->
+<div class="page" data-tracker-key="example-revision-tracker.v1">
+
+  <header class="masthead">
+    <div class="eyebrow">
+      <span>Example data</span><span class="sep">/</span>
+      <span>Manuscript · revision round 1</span><span class="sep">/</span>
+      <span>updated 2026-10-04</span>
+    </div>
+    <h1>Example Revision Tracker</h1>
+    <p class="standfirst">Everything between the reviewers' letter and resubmission: two points that change results, one decision that is yours, and the supplement and letter that have to agree with them.</p>
+  </header>
+
+  <section class="tiles" aria-label="Summary">
+    <div class="tile"><span class="num" id="t-open">0</span><span class="lbl">Open</span></div>
+    <div class="tile is-blocker"><span class="num" id="t-block">0</span><span class="lbl">Blockers</span></div>
+    <div class="tile is-decision"><span class="num" id="t-dec">0</span><span class="lbl">Your call</span></div>
+    <div class="tile is-done"><span class="num" id="t-done">0</span><span class="lbl">Done</span></div>
+  </section>
+
+  <div class="progress">
+    <div class="progress-track" id="bar-track" role="progressbar" aria-label="Items done" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="progress-fill" id="bar"></div></div>
+    <div class="progress-note" id="bar-note">0 of 0 done</div>
+  </div>
+
+  <section class="callouts" aria-label="Where things stand">
+    <div class="callout next">
+      <h2>Next up</h2>
+      <ol>
+        <li><a class="ref" href="#R1.3">R1.3</a> Add bootstrap intervals to Table 2. It blocks S1 and the letter.</li>
+        <li><a class="ref" href="#R2.2">R2.2</a> Decide on the sensitivity analysis before Friday's lab meeting.</li>
+        <li><a class="ref" href="#S3">S3</a> Fix the legend numbering. It takes ten minutes.</li>
+      </ol>
+    </div>
+    <div class="callout waiting">
+      <h2>Waiting on</h2>
+      <ul>
+        <li><a class="ref" href="#S2">S2</a> <b>Excavation team:</b> sampling dates for 4 burials in Table S2. Asked 2026-09-30.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="callout decided" aria-labelledby="h-decided">
+    <h2 id="h-decided">Decided</h2>
+    <ul>
+      <li><b>D1 · 2026-09-29.</b> Reviewer 1 is answered point by point. Reviewer 2's six minor points share one section of the letter.</li>
+      <li><b>D2 · 2026-10-01.</b> Duplicate individuals are removed, not merged. Their IDs are listed in Table S9.</li>
+    </ul>
+  </section>
+
+  <div class="toolbar" role="toolbar" aria-label="Filter and actions">
+    <button type="button" data-filter="all" aria-pressed="true">All</button>
+    <button type="button" data-filter="open" aria-pressed="false">Open</button>
+    <button type="button" data-filter="blockers" aria-pressed="false">Blockers</button>
+    <button type="button" data-filter="decisions" aria-pressed="false">Your call</button>
+    <button type="button" data-filter="done" aria-pressed="false">Done</button>
+    <span class="spacer"></span>
+    <button type="button" class="minor" id="btn-expand">Expand all</button>
+    <button type="button" class="minor" id="btn-copy">Copy open</button>
+    <button type="button" class="minor" id="btn-reset">Reset ticks</button>
+  </div>
+  <textarea id="copybox" aria-label="Open items as text" readonly hidden></textarea>
+  <p class="empty" id="empty" hidden>Nothing matches this filter.</p>
+
+  <!-- ============ PHASE 01 ============ -->
+  <section class="phase" aria-labelledby="ph-1">
+    <div class="phase-head">
+      <span class="phase-ord">01</span>
+      <div>
+        <h2 id="ph-1">Reviewer points that change results</h2>
+        <p>These change numbers in the main text, so they come before anything that quotes those numbers.</p>
+      </div>
+      <span class="phase-count"></span>
+    </div>
+    <ul class="items">
+
+      <li class="item" id="R1.1" data-id="R1.1" data-sev="2" data-default-done="true">
+        <input type="checkbox" id="c-R1.1">
+        <details>
+          <summary>
+            <span class="id">R1.1</span>
+            <span class="t">Remove the 12 duplicate individuals and re-run the PCA</span>
+            <span class="chips"><span class="chip done">Done</span></span>
+          </summary>
+          <div class="detail">
+            <section class="done-note">
+              <h4>Done · 2026-10-02</h4>
+              <p>Re-ran <code>analysis/pca.py</code> on <code>samples_dedup.tsv</code>. Figure 2 is regenerated as <code>fig2_pca_v2.pdf</code>. Checked: the 12 IDs from the reviewer's list are absent from the input, and no other row changed.</p>
+            </section>
+            <div class="facts">
+              <div><span>individuals before / after</span><span>1,204 → 1,192</span></div>
+              <div><span>largest change in PC1 loading</span><span>0.008</span></div>
+              <div><span>populations</span><span>38 (unchanged)</span></div>
+            </div>
+            <section>
+              <h4>What the reviewer asked</h4>
+              <p>Reviewer 1, point 1: twelve individuals appear twice under different lab IDs, which inflates the sample size and pulls PC2.</p>
+            </section>
+          </div>
+        </details>
+      </li>
+
+      <li class="item" id="R1.3" data-id="R1.3" data-sev="1">
+        <input type="checkbox" id="c-R1.3">
+        <details>
+          <summary>
+            <span class="id">R1.3</span>
+            <span class="t">Report a 95% interval for every FST value in Table 2</span>
+            <span class="chips"><span class="chip s1">Blocker</span></span>
+          </summary>
+          <div class="detail">
+            <section>
+              <h4>Where</h4>
+              <p><code>analysis/fst.py</code>, function <code>pairwise_fst()</code>. Table 2 is written by <code>make_tables.py</code>; search for <code>table2</code>.</p>
+            </section>
+            <section>
+              <h4>Steps</h4>
+              <ol>
+                <li>Add a bootstrap over individuals (1,000 replicates, fixed seed) inside <code>pairwise_fst()</code>.</li>
+                <li>Write the 2.5% and 97.5% quantiles next to each estimate.</li>
+                <li>Regenerate Table 2 and check that every point estimate is unchanged.</li>
+              </ol>
+            </section>
+            <section>
+              <h4>Done when</h4>
+              <p>Table 2 has an interval for every pair, and the estimates match the current table to four decimals.</p>
+            </section>
+            <p class="flag">Pairs with fewer than 5 individuals will give wide intervals. Say so in the legend rather than dropping them.</p>
+          </div>
+        </details>
+      </li>
+
+      <li class="item" id="R2.2" data-id="R2.2" data-sev="2" data-decision="true">
+        <input type="checkbox" id="c-R2.2">
+        <details>
+          <summary>
+            <span class="id">R2.2</span>
+            <span class="t">Add the requested sensitivity analysis, or argue it is out of scope</span>
+            <span class="chips"><span class="chip dec">Your call</span><span class="chip s2">High</span></span>
+          </summary>
+          <div class="detail">
+            <section>
+              <h4>Options</h4>
+              <ol>
+                <li><strong>Run it.</strong> Repeat the main analysis at three coverage thresholds. About a day of compute, and it answers the point fully.</li>
+                <li><strong>Argue scope.</strong> Explain in the letter that coverage is already a covariate. It costs nothing, but Reviewer 2 asked twice.</li>
+              </ol>
+            </section>
+            <section>
+              <h4>Recommendation</h4>
+              <p>Option 1. The reviewer has raised it twice, and a supplementary figure is cheaper than a third round.</p>
+            </section>
+          </div>
+        </details>
+      </li>
+
+    </ul>
+  </section>
+
+  <!-- ============ PHASE 02 ============ -->
+  <section class="phase" aria-labelledby="ph-2">
+    <div class="phase-head">
+      <span class="phase-ord">02</span>
+      <div>
+        <h2 id="ph-2">Supplement and figures</h2>
+        <p>Everything that quotes the re-run numbers. Wait for phase 01 before regenerating any table.</p>
+      </div>
+      <span class="phase-count"></span>
+    </div>
+    <ul class="items">
+
+      <li class="item" id="S1" data-id="S1" data-sev="2">
+        <input type="checkbox" id="c-S1">
+        <details>
+          <summary>
+            <span class="id">S1</span>
+            <span class="t">Regenerate Table S4 from the re-run</span>
+            <span class="chips"><span class="chip s2">High</span></span>
+          </summary>
+          <div class="detail">
+            <section>
+              <h4>Steps</h4>
+              <ol>
+                <li>Run <code>make_tables.py --only S4</code> after R1.3 is done.</li>
+                <li>Compare row counts with Table 2. Both should list 38 populations.</li>
+              </ol>
+            </section>
+            <p class="needs">needs R1.1 R1.3</p>
+          </div>
+        </details>
+      </li>
+
+      <li class="item waiting" id="S2" data-id="S2" data-sev="3">
+        <input type="checkbox" id="c-S2">
+        <details>
+          <summary>
+            <span class="id">S2</span>
+            <span class="t">Confirm the sampling dates in Table S2 with the excavation team</span>
+            <span class="chips"><span class="chip wait">Waiting</span><span class="chip s3">Medium</span></span>
+          </summary>
+          <div class="detail">
+            <section>
+              <h4>Status</h4>
+              <p>Asked on 2026-09-30 for burials 14, 22, 23 and 31. No reply yet. If nothing arrives by 2026-10-09, mark the four dates "as reported in the excavation report" in the legend.</p>
+            </section>
+          </div>
+        </details>
+      </li>
+
+      <li class="item" id="S3" data-id="S3" data-sev="4">
+        <input type="checkbox" id="c-S3">
+        <details>
+          <summary>
+            <span class="id">S3</span>
+            <span class="t">Make the figure legend numbering match the text</span>
+            <span class="chips"><span class="chip new">New</span><span class="chip s4">Low</span></span>
+          </summary>
+          <div class="detail">
+            <section>
+              <h4>What</h4>
+              <p>The main text cites Figure S5 for the outgroup tree. The legend file still numbers it S4. Search for <code>Figure S4</code> in <code>supplement.docx</code>.</p>
+            </section>
+          </div>
+        </details>
+      </li>
+
+    </ul>
+  </section>
+
+  <!-- ============ PHASE 03 ============ -->
+  <section class="phase" aria-labelledby="ph-3">
+    <div class="phase-head">
+      <span class="phase-ord">03</span>
+      <div>
+        <h2 id="ph-3">Resubmit</h2>
+        <p>Last, because the letter has to describe the files exactly as they are uploaded.</p>
+      </div>
+      <span class="phase-count"></span>
+    </div>
+    <ul class="items">
+
+      <li class="item" id="X1" data-id="X1" data-sev="2">
+        <input type="checkbox" id="c-X1">
+        <details>
+          <summary>
+            <span class="id">X1</span>
+            <span class="t">Check every claim in the response letter against the files</span>
+            <span class="chips"><span class="chip s2">High</span></span>
+          </summary>
+          <div class="detail">
+            <section>
+              <h4>Steps</h4>
+              <ol>
+                <li>For each answer, open the file it names and confirm the number, figure or line it cites.</li>
+                <li>List anything that does not match as a new item here instead of fixing it silently.</li>
+              </ol>
+            </section>
+            <p class="needs">needs every item in phases 01 and 02</p>
+          </div>
+        </details>
+      </li>
+
+      <li class="item" id="X2" data-id="X2" data-sev="3">
+        <input type="checkbox" id="c-X2">
+        <details>
+          <summary>
+            <span class="id">X2</span>
+            <span class="t">Deposit the code and processed data, then paste the DOI into Availability</span>
+            <span class="chips"><span class="chip s3">Medium</span></span>
+          </summary>
+          <div class="detail">
+            <section>
+              <h4>Steps</h4>
+              <ol>
+                <li>Tag the analysis repository at the commit that produced the resubmitted figures.</li>
+                <li>Upload the tagged release and <code>processed/</code> to the data repository, and reserve the DOI.</li>
+                <li>Paste the DOI into the Availability section and the letter.</li>
+              </ol>
+            </section>
+          </div>
+        </details>
+      </li>
+
+    </ul>
+  </section>
+
+  <!-- ============ ARCHIVE: finished phases move here, newest first ============ -->
+  <details class="archive">
+    <summary>Archive · 1 finished phase</summary>
+    <section class="phase" aria-labelledby="ph-0">
+      <div class="phase-head">
+        <span class="phase-ord">00</span>
+        <div>
+          <h2 id="ph-0">Set up the revision</h2>
+          <p>Finished 2026-10-01.</p>
+        </div>
+      </div>
+      <ul class="items">
+        <li class="item" id="P1" data-id="P1" data-sev="4">
+          <details>
+            <summary>
+              <span class="id">P1</span>
+              <span class="t">Split the decision letter into numbered points</span>
+              <span class="chips"><span class="chip done">Done</span></span>
+            </summary>
+            <div class="detail">
+              <section class="done-note">
+                <h4>Done · 2026-10-01</h4>
+                <p>Reviewer 1 has 4 points (R1.1 to R1.4), Reviewer 2 has 6 (R2.1 to R2.6). Saved as <code>revision_1/points.md</code>.</p>
+              </section>
+            </div>
+          </details>
+        </li>
+      </ul>
+    </section>
+  </details>
+
+  <footer>
+    <section>
+      <h3>Changelog</h3>
+      <ul>
+        <li><b>2026-10-04.</b> R1.1 marked done after checking the re-run output. S3 added. Next up reordered so R1.3 comes first.</li>
+        <li><b>2026-10-01.</b> Tracker created from <code>decision_letter.pdf</code> and the files in <code>submission_1/</code>.</li>
+      </ul>
+    </section>
+    <section>
+      <h3>Basis</h3>
+      <p>Built from <code>decision_letter.pdf</code> and <code>submission_1/</code>, read 2026-10-01. R1.1 checked against <code>results/pca_v2/</code> on 2026-10-02.</p>
+    </section>
+    <section>
+      <h3>Not verified</h3>
+      <ul>
+        <li>Whether Reviewer 2's point 4 means Figure 3 or Figure S3. The letter says "Fig. 3" in one place and "the supplementary tree" in another.</li>
+        <li>That the journal's current data policy requires a DOI before acceptance rather than at submission.</li>
+      </ul>
+    </section>
+  </footer>
+
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* Tracker behaviour. Driven entirely by markup, so leave it unchanged when filling in a tracker:
+   .phase .item[data-id]      one task; items inside .archive are not counted
+   data-sev="1|2|3|4"         blocker | high | medium | low (stripe colour, Blockers filter)
+   data-decision="true"       needs the user's decision (Your call tile and filter)
+   data-default-done="true"   ships ticked; a viewer's own tick or untick still wins
+   .page[data-tracker-key]    localStorage key, unique per tracker */
+(function () {
+  "use strict";
+
+  var page = document.querySelector(".page");
+  var KEY = (page && page.getAttribute("data-tracker-key")) || "tracker.v1";
+  var items = Array.prototype.slice.call(document.querySelectorAll(".phase .item"))
+    .filter(function (el) { return !el.closest(".archive"); });
+  var phases = Array.prototype.slice.call(document.querySelectorAll(".phase"))
+    .filter(function (el) { return !el.closest(".archive"); });
+  var filterButtons = Array.prototype.slice.call(document.querySelectorAll(".toolbar [data-filter]"));
+  var toastEl = document.getElementById("toast");
+  var copyBox = document.getElementById("copybox");
+  var toastTimer = null;
+  var current = "all";
+
+  function readState() {
+    try {
+      var raw = window.localStorage.getItem(KEY);
+      var parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (e) { return {}; }
+  }
+  function writeState(s) {
+    try { window.localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { /* storage blocked: ticks last for this visit only */ }
+  }
+  var state = readState();
+
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    if (toastTimer) { window.clearTimeout(toastTimer); }
+    toastTimer = window.setTimeout(function () { toastEl.classList.remove("show"); }, 2200);
+  }
+
+  function isDone(item) { return item.classList.contains("done"); }
+  function shipped(item) { return item.getAttribute("data-default-done") === "true"; }
+  function setDone(item, done) {
+    var box = item.querySelector('input[type="checkbox"]');
+    if (box) { box.checked = done; }
+    item.classList.toggle("done", done);
+  }
+
+  items.forEach(function (item) {
+    var id = item.getAttribute("data-id");
+    var box = item.querySelector('input[type="checkbox"]');
+    if (!box) { return; }
+    box.setAttribute("aria-label", "Mark " + id + " done");
+    var stored = Object.prototype.hasOwnProperty.call(state, id);
+    setDone(item, stored ? !!state[id] : shipped(item));
+    box.addEventListener("change", function () {
+      setDone(item, box.checked);
+      if (box.checked === shipped(item)) { delete state[id]; } else { state[id] = box.checked; }
+      writeState(state);
+      refresh();
+      applyFilter(current);
+    });
+  });
+
+  function refresh() {
+    var open = 0, blockers = 0, decisions = 0, done = 0;
+    items.forEach(function (item) {
+      if (isDone(item)) { done++; return; }
+      open++;
+      if (item.getAttribute("data-sev") === "1") { blockers++; }
+      if (item.getAttribute("data-decision") === "true") { decisions++; }
+    });
+    document.getElementById("t-open").textContent = open;
+    document.getElementById("t-block").textContent = blockers;
+    document.getElementById("t-dec").textContent = decisions;
+    document.getElementById("t-done").textContent = done;
+
+    var total = items.length;
+    var pct = total ? Math.round((done / total) * 100) : 0;
+    document.getElementById("bar").style.width = pct + "%";
+    document.getElementById("bar-track").setAttribute("aria-valuenow", String(pct));
+    document.getElementById("bar-note").textContent = done + " of " + total + " done · " + pct + "%";
+
+    phases.forEach(function (phase) {
+      var all = phase.querySelectorAll(".item");
+      var left = Array.prototype.filter.call(all, function (i) { return !isDone(i); }).length;
+      var c = phase.querySelector(".phase-count");
+      if (c) { c.textContent = left ? left + " of " + all.length + " open" : "all done"; }
+    });
+  }
+
+  function matches(item, mode) {
+    var d = isDone(item);
+    if (mode === "open") { return !d; }
+    if (mode === "done") { return d; }
+    if (mode === "blockers") { return !d && item.getAttribute("data-sev") === "1"; }
+    if (mode === "decisions") { return !d && item.getAttribute("data-decision") === "true"; }
+    return true;
+  }
+
+  function applyFilter(mode) {
+    current = mode;
+    var anyShown = false;
+    items.forEach(function (item) { item.hidden = !matches(item, mode); });
+    phases.forEach(function (phase) {
+      var visible = Array.prototype.some.call(phase.querySelectorAll(".item"), function (i) { return !i.hidden; });
+      phase.hidden = !visible;
+      if (visible) { anyShown = true; }
+    });
+    document.getElementById("empty").hidden = anyShown;
+    filterButtons.forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.getAttribute("data-filter") === mode));
+    });
+  }
+
+  filterButtons.forEach(function (b) {
+    b.addEventListener("click", function () { applyFilter(b.getAttribute("data-filter")); });
+  });
+
+  var expandBtn = document.getElementById("btn-expand");
+  expandBtn.addEventListener("click", function () {
+    var details = Array.prototype.slice.call(document.querySelectorAll(".phase .item > details"))
+      .filter(function (d) { return !d.closest(".archive"); });
+    var anyClosed = details.some(function (d) { return !d.open; });
+    details.forEach(function (d) { d.open = anyClosed; });
+    expandBtn.textContent = anyClosed ? "Collapse all" : "Expand all";
+  });
+
+  function openItemsText() {
+    var title = document.querySelector("h1").textContent.trim();
+    var lines = ["# " + title + " · open items", ""];
+    phases.forEach(function (phase) {
+      var open = Array.prototype.filter.call(phase.querySelectorAll(".item"), function (i) { return !isDone(i); });
+      if (!open.length) { return; }
+      var ord = phase.querySelector(".phase-ord");
+      var head = phase.querySelector("h2").textContent.trim();
+      lines.push("## " + (ord ? ord.textContent.trim() + " " : "") + head);
+      open.forEach(function (i) {
+        var tags = "";
+        if (i.getAttribute("data-sev") === "1") { tags += " [BLOCKER]"; }
+        if (i.getAttribute("data-decision") === "true") { tags += " [YOUR CALL]"; }
+        if (i.classList.contains("waiting")) { tags += " [WAITING]"; }
+        lines.push("- [ ] " + i.getAttribute("data-id") + tags + " " + i.querySelector(".t").textContent.trim());
+      });
+      lines.push("");
+    });
+    return lines.join("\n").trim() + "\n";
+  }
+
+  document.getElementById("btn-copy").addEventListener("click", function () {
+    var text = openItemsText();
+    function fallback() {
+      copyBox.hidden = false;
+      copyBox.value = text;
+      copyBox.focus();
+      copyBox.select();
+      toast("Selected below. Press Ctrl+C or ⌘C to copy.");
+    }
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+          copyBox.hidden = true;
+          toast("Open items copied");
+        }, fallback);
+      } else { fallback(); }
+    } catch (e) { fallback(); }
+  });
+
+  var resetBtn = document.getElementById("btn-reset");
+  var armTimer = null;
+  resetBtn.addEventListener("click", function () {
+    if (!resetBtn.classList.contains("armed")) {
+      resetBtn.classList.add("armed");
+      resetBtn.textContent = "Click again to reset";
+      armTimer = window.setTimeout(function () {
+        resetBtn.classList.remove("armed");
+        resetBtn.textContent = "Reset ticks";
+      }, 4000);
+      return;
+    }
+    window.clearTimeout(armTimer);
+    resetBtn.classList.remove("armed");
+    resetBtn.textContent = "Reset ticks";
+    state = {};
+    writeState(state);
+    items.forEach(function (item) { setDone(item, shipped(item)); });
+    refresh();
+    applyFilter(current);
+    toast("Your ticks are cleared");
+  });
+
+  function openFromHash() {
+    var id = decodeURIComponent((window.location.hash || "").slice(1));
+    if (!id) { return; }
+    var el = document.getElementById(id);
+    if (!el || !el.classList.contains("item")) { return; }
+    if (el.hidden) { applyFilter("all"); }
+    var arch = el.closest(".archive");
+    if (arch) { arch.open = true; }
+    var d = el.querySelector("details");
+    if (d) { d.open = true; }
+    el.scrollIntoView({ block: "start" });
+  }
+  window.addEventListener("hashchange", openFromHash);
+
+  refresh();
+  applyFilter("all");
+  openFromHash();
+})();
+</script>
